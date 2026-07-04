@@ -17,7 +17,12 @@ VALID_EXPR = re.compile(r'^[0-9\+\-\*\/\.\s]+$')
 async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
+    if update.message.text:
     expr = update.message.text.strip()
+elif update.message.caption:
+    expr = update.message.caption.strip()
+else:
+    return
 
     if user_id != ALLOWED_USER:
         return
@@ -45,7 +50,13 @@ def main():
     TOKEN = os.getenv("TOKEN")
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("myid", myid))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, calculate))
+    app.add_handler(
+    MessageHandler(
+        (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL)
+        & ~filters.COMMAND,
+        calculate,
+    )
+)
     app.run_polling()
 
 if __name__ == "__main__":
