@@ -38,6 +38,14 @@ async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     before = group_totals.get(chat_id, 0)
+
+    # If user sends only 0, show remaining amount
+    if content.strip() == "0":
+        await update.message.reply_text(
+            f"💰 Remaining Amount: {before}"
+        )
+        return
+
     now = 0
 
     # Read every line separately
@@ -67,6 +75,23 @@ async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
+
+    if user_id != ALLOWED_USER:
+        return
+
+    previous = group_totals.get(chat_id, 0)
+    group_totals[chat_id] = 0
+
+    await update.message.reply_text(
+        f"✅ Payment Received\n\n"
+        f"Paid Amount: {previous}\n"
+        f"Remaining Amount: 0"
+    )
+
+
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"👤 user_id: {update.effective_user.id}\n"
@@ -80,6 +105,7 @@ def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("myid", myid))
+    app.add_handler(CommandHandler("paid", paid))
 
     app.add_handler(
         MessageHandler(
