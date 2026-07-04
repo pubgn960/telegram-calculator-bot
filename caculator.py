@@ -42,7 +42,7 @@ async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 def main():
-    TOKEN = os.getenv("BOT_TOKEN", "PUT_YOUR_BOT_TOKEN_HERE")
+    TOKEN = os.getenv("8810034885:AAHt8jKLE4Q92VLiVWLPs1GBF17LhMlnIGY")
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("myid", myid))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, calculate))
