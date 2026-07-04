@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -19,38 +18,43 @@ logging.getLogger("apscheduler").setLevel(logging.WARNING)
 # Running total for each group
 group_totals = {}
 
-# Your Telegram user ID
+# Your Telegram User ID
 ALLOWED_USER = 1573531032
-
-# Allow only numbers and math operators
-VALID_EXPR = re.compile(r'^[0-9+\-*/.\s]+$')
 
 
 async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
 
-    # Read text or caption
-    if update.message.text:
-        expr = update.message.text.strip()
-    elif update.message.caption:
-        expr = update.message.caption.strip()
-    else:
-        return
-
-    # Allow only you
     if user_id != ALLOWED_USER:
         return
 
-    # Ignore invalid expressions
-    if not VALID_EXPR.match(expr):
+    # Read text or caption
+    if update.message.text:
+        content = update.message.text
+    elif update.message.caption:
+        content = update.message.caption
+    else:
         return
 
     before = group_totals.get(chat_id, 0)
+    now = 0
 
-    try:
-        now = float(sympify(expr))
-    except Exception:
+    # Read every line separately
+    for line in content.splitlines():
+        line = line.strip()
+
+        if not line:
+            continue
+
+        try:
+            value = float(sympify(line))
+            now += value
+        except Exception:
+            # Ignore text lines
+            continue
+
+    if now == 0:
         return
 
     total = before + now
@@ -58,7 +62,7 @@ async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"before: {before}\n"
-        f"now: {expr} = {now}\n"
+        f"now: {now}\n"
         f"total: {total}"
     )
 
@@ -77,7 +81,6 @@ def main():
 
     app.add_handler(CommandHandler("myid", myid))
 
-    # Accept text, photo captions, video captions and document captions
     app.add_handler(
         MessageHandler(
             (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL)
