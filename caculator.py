@@ -19,7 +19,11 @@ logging.getLogger("apscheduler").setLevel(logging.WARNING)
 group_totals = {}
 
 # Your Telegram User ID
-ALLOWED_USER = 1573531032,6656261222,1408137192
+ALLOWED_USERS = [
+    1573531032,
+    6656261222,
+    1408137192
+]
 
 
 async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
