@@ -18,11 +18,11 @@ logging.getLogger("apscheduler").setLevel(logging.WARNING)
 # Running total for each group
 group_totals = {}
 
-# Your Telegram User ID
+# Allowed Telegram User IDs
 ALLOWED_USERS = [
     1573531032,
     6656261222,
-    1408137192
+    1408137192,
 ]
 
 
@@ -30,7 +30,8 @@ async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
 
-    if user_id != ALLOWED_USER:
+    # Only allowed users can use the bot
+    if user_id not in ALLOWED_USERS:
         return
 
     # Read text or caption
@@ -83,7 +84,8 @@ async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
 
-    if user_id != ALLOWED_USER:
+    # Only allowed users can use the command
+    if user_id not in ALLOWED_USERS:
         return
 
     previous = group_totals.get(chat_id, 0)
@@ -119,6 +121,7 @@ def main():
         )
     )
 
+    print("Bot is running...")
     app.run_polling()
 
 
