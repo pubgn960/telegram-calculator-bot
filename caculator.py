@@ -1,5 +1,6 @@
 import logging
 import os
+import sqlite3
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -15,26 +16,53 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram").setLevel(logging.WARNING)
 logging.getLogger("apscheduler").setLevel(logging.WARNING)
 
-# Running total for each group
-group_totals = {}
+DB_NAME = "data.db"
 
-# Allowed Telegram User IDs
 ALLOWED_USERS = [
     1573531032,
     6656261222,
     1408137192,
 ]
 
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS group_totals(
+        chat_id INTEGER PRIMARY KEY,
+        total REAL DEFAULT 0
+    )
+    """)
+    conn.commit()
+    conn.close()
+
+def get_total(chat_id):
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    cur.execute("SELECT total FROM group_totals WHERE chat_id=?", (chat_id,))
+    row = cur.fetchone()
+    conn.close()
+    return row[0] if row else 0
+
+def save_total(chat_id, total):
+    conn = sqlite3.connect(DB_NAME)
+    cur = conn.cursor()
+    cur.execute("""
+    INSERT INTO group_totals(chat_id,total)
+    VALUES(?,?)
+    ON CONFLICT(chat_id)
+    DO UPDATE SET total=excluded.total
+    """, (chat_id, total))
+    conn.commit()
+    conn.close()
 
 async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
     user_id = update.effective_user.id
-
-    # Only allowed users can use the bot
     if user_id not in ALLOWED_USERS:
         return
 
-    # Read text or caption
+    chat_id = update.effective_chat.id
+
     if update.message.text:
         content = update.message.text
     elif update.message.caption:
@@ -42,77 +70,53 @@ async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         return
 
-    before = group_totals.get(chat_id, 0)
+    before = get_total(chat_id)
 
-    # If user sends only 0, show remaining amount
     if content.strip() == "0":
-        await update.message.reply_text(
-            f"💰 Remaining Amount: {before}"
-        )
+        await update.message.reply_text(f"💰 Remaining Amount: {before}")
         return
 
     now = 0
-
-    # Read every line separately
     for line in content.splitlines():
         line = line.strip()
-
         if not line:
             continue
-
         try:
-            value = float(sympify(line))
-            now += value
+            now += float(sympify(line))
         except Exception:
-            # Ignore text lines
             continue
 
     if now == 0:
         return
 
     total = before + now
-    group_totals[chat_id] = total
+    save_total(chat_id, total)
 
     await update.message.reply_text(
-        f"before: {before}\n"
-        f"now: {now}\n"
-        f"total: {total}"
+        f"before: {before}\nnow: {now}\ntotal: {total}"
     )
-
 
 async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    user_id = update.effective_user.id
-
-    # Only allowed users can use the command
-    if user_id not in ALLOWED_USERS:
+    if update.effective_user.id not in ALLOWED_USERS:
         return
-
-    previous = group_totals.get(chat_id, 0)
-    group_totals[chat_id] = 0
-
+    chat_id = update.effective_chat.id
+    previous = get_total(chat_id)
+    save_total(chat_id, 0)
     await update.message.reply_text(
-        f"✅ Payment Received\n\n"
-        f"Paid Amount: {previous}\n"
-        f"Remaining Amount: 0"
+        f"✅ Payment Received\n\nPaid Amount: {previous}\nRemaining Amount: 0"
     )
-
 
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        f"👤 user_id: {update.effective_user.id}\n"
-        f"💬 chat_id: {update.effective_chat.id}"
+        f"👤 user_id: {update.effective_user.id}\n💬 chat_id: {update.effective_chat.id}"
     )
 
-
 def main():
-    TOKEN = os.getenv("TOKEN")
-
-    app = ApplicationBuilder().token(TOKEN).build()
-
+    init_db()
+    token = os.getenv("TOKEN")
+    app = ApplicationBuilder().token(token).build()
     app.add_handler(CommandHandler("myid", myid))
     app.add_handler(CommandHandler("paid", paid))
-
     app.add_handler(
         MessageHandler(
             (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL)
@@ -120,10 +124,8 @@ def main():
             calculate,
         )
     )
-
     print("Bot is running...")
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
