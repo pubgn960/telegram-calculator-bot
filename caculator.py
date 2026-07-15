@@ -112,11 +112,14 @@ async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not line:
             continue
 
-        # Sirf pehli line ke start ka number read kare
-        match = re.match(r'^[-+]?\d+(?:\.\d+)?', line)
-        if match:
-            now = float(match.group())
-            break
+        try:
+            # Full math expression evaluate kare (15.2*2, 100+50, 20/4, etc.)
+            value = sympify(line)
+            if value.is_real:
+                now = float(value)
+                break
+        except Exception:
+            continue
 
     if now is None:
         return
