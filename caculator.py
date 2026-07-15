@@ -10,6 +10,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+import re
 from sympy import sympify
 
 logging.basicConfig(format="%(message)s", level=logging.INFO)
@@ -103,7 +104,7 @@ async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    now = 0
+    now = None
 
     for line in content.splitlines():
         line = line.strip()
@@ -111,12 +112,13 @@ async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not line:
             continue
 
-        try:
-            now += float(sympify(line))
-        except Exception:
-            continue
+        # Sirf pehli line ke start ka number read kare
+        match = re.match(r'^[-+]?\d+(?:\.\d+)?', line)
+        if match:
+            now = float(match.group())
+            break
 
-    if now == 0:
+    if now is None:
         return
 
     total = before + now
