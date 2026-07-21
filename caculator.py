@@ -38,8 +38,14 @@ def init_db():
     cur.execute("""
     CREATE TABLE IF NOT EXISTS group_totals(
         chat_id BIGINT PRIMARY KEY,
-        total DOUBLE PRECISION DEFAULT 0
+        total DOUBLE PRECISION DEFAULT 0,
+        previous_total DOUBLE PRECISION
     )
+    """)
+
+    cur.execute("""
+    ALTER TABLE group_totals
+    ADD COLUMN IF NOT EXISTS previous_total DOUBLE PRECISION
     """)
 
     conn.commit()
@@ -69,10 +75,10 @@ def save_total(chat_id, total):
     cur = conn.cursor()
 
     cur.execute("""
-    INSERT INTO group_totals(chat_id,total)
-    VALUES(%s,%s)
+    INSERT INTO group_totals(chat_id,total,previous_total)
+    VALUES(%s,%s,NULL)
     ON CONFLICT(chat_id)
-    DO UPDATE SET total=EXCLUDED.total
+    DO UPDATE SET previous_total=group_totals.total, total=EXCLUDED.total
     """, (chat_id, total))
 
     conn.commit()
@@ -135,6 +141,59 @@ async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+def get_previous_total(chat_id):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        "SELECT previous_total FROM group_totals WHERE chat_id=%s",
+        (chat_id,)
+    )
+
+    row = cur.fetchone()
+
+    cur.close()
+    conn.close()
+
+    return row[0] if (row and row[0] is not None) else None
+
+
+def restore_previous(chat_id, previous):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+    UPDATE group_totals
+    SET total=%s, previous_total=NULL
+    WHERE chat_id=%s
+    """, (previous, chat_id))
+
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+async def undo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ALLOWED_USERS:
+        return
+
+    chat_id = update.effective_chat.id
+
+    previous = get_previous_total(chat_id)
+
+    if previous is None:
+        await update.message.reply_text("❌ Nothing to undo.")
+        return
+
+    current = get_total(chat_id)
+    restore_previous(chat_id, previous)
+
+    await update.message.reply_text(
+        f"↩️ Undo successful\n\n"
+        f"Reverted: {current} → {previous}"
+    )
+
+
 async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ALLOWED_USERS:
         return
@@ -174,6 +233,7 @@ def main():
 
     app.add_handler(CommandHandler("myid", myid))
     app.add_handler(CommandHandler("paid", paid))
+    app.add_handler(CommandHandler("undo", undo))
 
     app.add_handler(
         MessageHandler(
