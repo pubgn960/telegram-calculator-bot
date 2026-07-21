@@ -47,6 +47,10 @@ def init_db():
     ALTER TABLE group_totals
     ADD COLUMN IF NOT EXISTS previous_total DOUBLE PRECISION
     """)
+    cur.execute("""
+    ALTER TABLE group_totals
+    ADD COLUMN IF NOT EXISTS last_amount DOUBLE PRECISION
+    """)
 
     conn.commit()
     cur.close()
@@ -70,16 +74,18 @@ def get_total(chat_id):
     return row[0] if row else 0
 
 
-def save_total(chat_id, total):
+def save_total(chat_id, total, amount=None):
     conn = get_connection()
     cur = conn.cursor()
 
     cur.execute("""
-    INSERT INTO group_totals(chat_id,total,previous_total)
-    VALUES(%s,%s,NULL)
+    INSERT INTO group_totals(chat_id,total,previous_total,last_amount)
+    VALUES(%s,%s,NULL,%s)
     ON CONFLICT(chat_id)
-    DO UPDATE SET previous_total=group_totals.total, total=EXCLUDED.total
-    """, (chat_id, total))
+    DO UPDATE SET previous_total=group_totals.total,
+                  total=EXCLUDED.total,
+                  last_amount=EXCLUDED.last_amount
+    """, (chat_id, total, amount))
 
     conn.commit()
 
@@ -132,7 +138,7 @@ async def calculate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     total = before + now
 
-    save_total(chat_id, total)
+    save_total(chat_id, total, now)
 
     await update.message.reply_text(
         f"before: {before}\n"
@@ -173,19 +179,28 @@ def restore_previous(chat_id, previous):
     conn.close()
 
 
+
+def get_last_amount(chat_id):
+    conn=get_connection()
+    cur=conn.cursor()
+    cur.execute("SELECT last_amount FROM group_totals WHERE chat_id=%s",(chat_id,))
+    row=cur.fetchone()
+    cur.close(); conn.close()
+    return row[0] if row else None
+
 async def undo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ALLOWED_USERS:
         return
 
     chat_id = update.effective_chat.id
 
-    previous = get_previous_total(chat_id)
-
-    if previous is None:
+    last = get_last_amount(chat_id)
+    if last is None:
         await update.message.reply_text("❌ Nothing to undo.")
         return
 
     current = get_total(chat_id)
+    previous = current - last
     restore_previous(chat_id, previous)
 
     await update.message.reply_text(
@@ -202,7 +217,7 @@ async def paid(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     previous = get_total(chat_id)
 
-    save_total(chat_id, 0)
+    save_total(chat_id, 0, None)
 
     await update.message.reply_text(
         f"✅ Payment Received\n\n"
@@ -250,3 +265,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
